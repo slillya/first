@@ -4,7 +4,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { TOOL_DESCRIPTIONS, ToolInputs, type ToolName } from "../src/ai/tools";
-import { SYSTEM_PROMPT } from "./prompt";
+import { SYSTEM_PROMPT } from "../src/ai/prompt";
 
 export interface Env {
   ANTHROPIC_API_KEY?: string;

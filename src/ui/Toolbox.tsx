@@ -144,7 +144,7 @@ export function Toolbox() {
               <Section title="Part">
                 <Tool icon="download" label="STEP" onClick={() => void exportPart("step")} />
                 <Tool icon="download" label="STL" onClick={() => void exportPart("stl")} />
-                <Tool icon="plus" label="New" onClick={() => window.confirm("Start a new part? You can undo this.") && newPart()} />
+                <Tool icon="plus" label="New" onClick={newPart} />
               </Section>
             </>
           )}

@@ -12,6 +12,9 @@ import {
   type FacePick,
 } from "../model/store";
 
+// Build-time constant: true only in the Claude artifact build (see scripts/build-artifact.mjs).
+const ARTIFACT = import.meta.env.MODE === "artifact";
+
 function axisAligned(f: FacePick): { normal: Axis; at: number } | null {
   if (!f.planar) return null;
   const axes: Axis[] = ["X", "Y", "Z"];
@@ -55,6 +58,7 @@ export async function exportPart(format: "step" | "stl") {
   try {
     const data = await kernel.export(format);
     const name = `${doc.value.name.replace(/[^\w.-]+/g, "_") || "part"}.${format}`;
+    if (ARTIFACT) return await (await import("../ai/artifact")).saveInArtifact(name, data);
     const file = new File([data], name, { type: format === "step" ? "model/step" : "model/stl" });
     // The iOS share sheet is the dependable way to get a file into Files or AirDrop.
     if (navigator.canShare?.({ files: [file] })) {

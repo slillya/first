@@ -109,8 +109,8 @@ button:disabled {
 .top {
   position: absolute;
   top: calc(var(--safe-t) + 10px);
-  left: calc(var(--safe-l) + 12px);
-  right: calc(var(--safe-r) + 12px);
+  left: max(16px, var(--safe-l));
+  right: max(16px, var(--safe-r));
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -193,12 +193,12 @@ button:disabled {
 
 .tree .panel {
   left: 0;
-  width: min(300px, calc(100vw - 24px));
+  width: min(300px, calc(100vw - 32px));
 }
 
 .tools .panel {
   right: 0;
-  width: min(292px, calc(100vw - 24px));
+  width: min(292px, calc(100vw - 32px));
 }
 
 .panel-head,
@@ -384,8 +384,8 @@ button:disabled {
 
 .bottom {
   position: absolute;
-  left: calc(var(--safe-l) + 12px);
-  right: calc(var(--safe-r) + 12px);
+  left: max(16px, var(--safe-l));
+  right: max(16px, var(--safe-r));
   bottom: calc(max(var(--safe-b), 10px) + 2px);
   display: flex;
   flex-direction: column;
@@ -753,6 +753,8 @@ button:disabled {
 .center-note.quiet {
   display: block;
   line-height: 1.5;
+  white-space: normal;
+  width: min(300px, 80%);
 }
 
 .center-note b {
@@ -763,7 +765,7 @@ button:disabled {
 .grid-note {
   position: absolute;
   top: calc(var(--safe-t) + 64px);
-  left: calc(var(--safe-l) + 18px);
+  left: calc(max(16px, var(--safe-l)) + 6px);
   font-size: 11px;
   color: var(--muted);
   pointer-events: none;

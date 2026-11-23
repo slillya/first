@@ -9,7 +9,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "deploy": "npm run build && wrangler deploy",
-    "e2e": "node tests/e2e/walkthrough.cjs"
+    "e2e": "node tests/e2e/walkthrough.cjs",
+    "build:artifact": "tsc --noEmit && vite build --mode artifact --outDir dist-artifact --base ./ && node scripts/build-artifact.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.12.0",

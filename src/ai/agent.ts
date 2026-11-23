@@ -26,6 +26,9 @@ import {
 import { viewport } from "../view/Viewport";
 import { ToolInputs, type ToolName } from "./tools";
 
+// Build-time constant: true only in the Claude artifact build (see scripts/build-artifact.mjs).
+const ARTIFACT = import.meta.env.MODE === "artifact";
+
 type Message = Anthropic.Beta.BetaMessage;
 type MessageParam = Anthropic.Beta.BetaMessageParam;
 type ContentBlock = Anthropic.Beta.BetaContentBlock;
@@ -110,7 +113,7 @@ async function step(messages: MessageParam[], signal: AbortSignal): Promise<Mess
 // ---------------------------------------------------------------------------
 // Context for a turn
 
-function describeState(userText: string): { text: string; wantsImage: boolean } {
+export function describeState(userText: string): { text: string; wantsImage: boolean } {
   const d = doc.value;
   const status = evalStatus.value;
   const errors = d.features.flatMap((f) => (status[f.id] && !status[f.id].ok ? [`${f.id}: ${status[f.id].error}`] : []));
@@ -207,7 +210,7 @@ function report(out: EvalOutcome, d: PartDoc, extra: Record<string, unknown> = {
   });
 }
 
-async function runTool(name: string, input: unknown): Promise<{ content: string; isError?: boolean }> {
+export async function runTool(name: string, input: unknown): Promise<{ content: string; isError?: boolean }> {
   if (!(name in ToolInputs)) return { content: `Unknown tool "${name}"`, isError: true };
   const parsed = ToolInputs[name as ToolName].safeParse(input);
   // Inputs stream unvalidated, so a schema failure is reported back the same way invalid JSON would be.
@@ -289,7 +292,9 @@ export async function send(userText: string) {
   if (!text) return;
 
   const before = doc.value;
-  const messages: MessageParam[] = [firstMessage(text)];
+  // Built before the message is added to the chat, so the request is not repeated in its own context.
+  const messages: MessageParam[] = ARTIFACT ? [] : [firstMessage(text)];
+  const artifactTurn = ARTIFACT ? (signal: AbortSignal) => import("./artifact").then((m) => m.runInArtifact(text, signal)) : null;
   chat.value = [...chat.value, { role: "user", text }];
   aiBusy.value = true;
   aiStatus.value = "Thinking…";
@@ -300,7 +305,8 @@ export async function send(userText: string) {
 
   try {
     let retries = 0;
-    for (let i = 0; i < MAX_STEPS; i++) {
+    if (artifactTurn) reply = await artifactTurn(controller.signal);
+    for (let i = 0; !artifactTurn && i < MAX_STEPS; i++) {
       let msg: Message;
       try {
         msg = await step(messages, controller.signal);

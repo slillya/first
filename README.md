@@ -2,7 +2,10 @@
 
 Parametric CAD for an iPhone. Sketch a part with your finger, or describe it in the chat box, and Claude turns it into a real solid with an editable feature tree.
 
-It is a web app (installable to the home screen), not a native app. The CAD kernel runs in the browser, so the only server is a small Cloudflare Worker that holds the Anthropic API key. Your laptop does not need to be on.
+It is a web app (installable to the home screen), not a native app. The CAD kernel runs in the browser, so nothing heavy runs on a server and your laptop does not need to be on. It ships two ways from the same code:
+
+- **As a site on Cloudflare.** A small Worker serves the app and holds your Anthropic API key. This is the real product: your own URL, a home-screen icon, full-screen.
+- **As a Claude artifact.** The same app published inside Claude, where the chat uses the viewer's own Claude account. No API key and nothing to deploy; good for trying changes quickly.
 
 ## What is on screen
 
@@ -37,6 +40,7 @@ iPhone browser                               Cloudflare Worker            Anthro
 - `src/kernel/evaluate.ts` builds it into B-rep geometry with [replicad](https://replicad.xyz) on OpenCascade, in a Web Worker. That is what makes real fillets, shells and STEP export possible.
 - Claude edits the same list through four tools (`src/ai/tools.ts`): add, update, delete features, rename the part. The tool loop runs in the browser (`src/ai/agent.ts`) because the kernel is there; every tool result tells Claude whether the part built, plus its bounding box and volume, so it can check and fix its own work.
 - `server/handler.ts` is the only server code. It adds the system prompt and tool definitions, calls the Messages API with streaming, and relays the turn.
+- In the artifact build there is no server at all; `src/ai/artifact.ts` hands the same tools to Claude through the viewer's account.
 
 ## Run it locally
 
@@ -73,6 +77,14 @@ Settings (Worker secrets / variables):
 | `CLAUDE_EFFORT` | `low`, `medium` (default), `high`, `xhigh`, `max`. Higher thinks longer. |
 | `CLAUDE_FALLBACKS` | Set to `off` to disable the server-side refusal fallback (on by default; it re-runs a turn on another model if a safety classifier declines it). |
 | `ANTHROPIC_BASE_URL` | Optional alternative endpoint, e.g. a Cloudflare AI Gateway. |
+
+## Publish it as a Claude artifact
+
+```bash
+npm run build:artifact    # writes dist-artifact/page.html, the script files, and the kernel split into two .wasm halves
+```
+
+Ask Claude Code to publish `dist-artifact/page.html` with the files listed in `dist-artifact/files.json` and the capabilities `sample` (with images) and `downloads`. In this build `src/ai/artifact.ts` replaces the server: Claude is called through the artifact runtime with the same four tools, and STEP/STL exports are saved through the viewer's save dialog as a zip (the dialog only accepts common file types).
 
 ## Tests
 

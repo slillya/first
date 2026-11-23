@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "preact/hooks";
-import { doc, gridStep, initKernel, kernelPhase, mode, toast } from "../model/store";
+import { doc, gridStep, initKernel, kernelError, kernelPhase, mode, toast } from "../model/store";
 import { createViewport } from "../view/Viewport";
 import { Composer, ReplyBubble } from "./Composer";
 import { DimLabels } from "./DimLabels";
@@ -34,7 +34,14 @@ export function App() {
           <span class="spinner" /> Loading the CAD kernel…
         </div>
       )}
-      {phase !== "loading" && empty && (
+      {phase === "failed" && kernelError.value && (
+        <div class="center-note quiet">
+          <b>The CAD kernel could not start.</b>
+          <br />
+          {kernelError.value}
+        </div>
+      )}
+      {phase !== "loading" && !kernelError.value && empty && (
         <div class="center-note quiet">
           Open <b>Tools</b> to start a sketch,
           <br />

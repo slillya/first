@@ -65,6 +65,7 @@ export const evalStatus = signal<Record<string, FeatureStatus>>({});
 export const bodyInfo = signal<BodyInfo | null>(null);
 export const mesh = signal<MeshData | null>(null);
 export const kernelPhase = signal<"loading" | "ready" | "busy" | "failed">("loading");
+export const kernelError = signal("");
 export const mode = signal<Mode>({ kind: "model" });
 export const selection = signal<{ faces: FacePick[]; edges: EdgePick[] }>({ faces: [], edges: [] });
 export const ink = signal<Vec2[][]>([]);
@@ -212,8 +213,8 @@ export function initKernel() {
       void requestEval();
     },
     (e: unknown) => {
+      kernelError.value = e instanceof Error ? e.message : "The CAD kernel failed to load";
       kernelPhase.value = "failed";
-      showToast(e instanceof Error ? e.message : "The CAD kernel failed to load");
     },
   );
 }
@@ -392,5 +393,6 @@ export function newPart() {
   sheet.value = null;
   treeSelected.value = null;
   void commit({ name: "Part1", features: [] });
+  showToast("New part. Undo brings the old one back.");
 }
 

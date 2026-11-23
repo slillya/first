@@ -7,13 +7,38 @@ import { setOC, type Shape3D } from "replicad";
 import { evaluate, realEdgeGroups } from "./evaluate";
 import type { KernelRequest, KernelResponse, MeshData } from "./protocol";
 
+// Build-time constant: true only in the Claude artifact build (see scripts/build-artifact.mjs).
+const ARTIFACT = import.meta.env.MODE === "artifact";
+
 let ready: Promise<void> | null = null;
 let current: Shape3D | null = null;
 
+type OcFactory = (options: object) => Promise<unknown>;
+
+async function loadKernel(): Promise<unknown> {
+  const factory = opencascade as unknown as OcFactory;
+  if (!ARTIFACT) return factory({ locateFile: () => wasmUrl });
+  // Artifact files are capped below the kernel's size, so it is published in two halves next to the page.
+  const parts = await Promise.all(
+    ["../kernel.0.wasm", "../kernel.1.wasm"].map(async (name) => {
+      const res = await fetch(new URL(name, self.location.href));
+      if (!res.ok) throw new Error(`Could not download the CAD kernel (${res.status})`);
+      return new Uint8Array(await res.arrayBuffer());
+    }),
+  );
+  const bytes = new Uint8Array(parts[0].length + parts[1].length);
+  bytes.set(parts[0]);
+  bytes.set(parts[1], parts[0].length);
+  return factory({
+    instantiateWasm(imports: WebAssembly.Imports, done: (instance: WebAssembly.Instance, module: WebAssembly.Module) => void) {
+      void WebAssembly.instantiate(bytes, imports).then((r) => done(r.instance, r.module));
+      return {};
+    },
+  });
+}
+
 function init(): Promise<void> {
-  ready ??= (opencascade as unknown as (o: object) => Promise<unknown>)({
-    locateFile: () => wasmUrl,
-  }).then((oc) => setOC(oc as never));
+  ready ??= loadKernel().then((oc) => setOC(oc as never));
   return ready;
 }
 
