@@ -26,6 +26,7 @@ export const PlaneSchema = z.union([
       xDir: pt3.describe("World direction of the sketch x axis; must be perpendicular to normal."),
     })
     .describe("Arbitrary plane, e.g. on a planar face of the body. Sketch y = normal × xDir."),
+  z.object({ feature: z.string().describe("id of an earlier plane feature") }).describe("A reference plane from the feature tree."),
 ]);
 
 export const ProfileSchema = z.discriminatedUnion("type", [
@@ -89,14 +90,89 @@ const base = {
 
 const op = z.enum(["add", "cut"]).describe("add = join material to the body, cut = remove it");
 
+const eid = z.string().regex(/^[A-Za-z0-9_-]{1,24}$/);
+
+export const EntitySchema = z.discriminatedUnion("type", [
+  z.object({
+    id: eid,
+    type: z.literal("point"),
+    x: num,
+    y: num,
+    fixed: z.boolean().optional().describe("Locked in place; the solver never moves it"),
+    src: pt3.optional().describe("Set on reference points: the model point (world mm) this was projected from"),
+  }),
+  z.object({
+    id: eid,
+    type: z.literal("line"),
+    p1: eid.describe("id of the start point entity"),
+    p2: eid.describe("id of the end point entity"),
+    construction: z.boolean().optional().describe("Construction geometry is ignored when extruding"),
+    ref: z.boolean().optional().describe("Reference to model geometry (an edge, or a face seen edge-on); treated as an infinite fixed line"),
+  }),
+  z.object({ id: eid, type: z.literal("circle"), c: eid.describe("id of the centre point"), r: pos, construction: z.boolean().optional() }),
+  z.object({
+    id: eid,
+    type: z.literal("arc"),
+    c: eid.describe("id of the centre point"),
+    p1: eid.describe("start point; the arc runs counter-clockwise from p1 to p2"),
+    p2: eid.describe("end point"),
+    construction: z.boolean().optional(),
+  }),
+]);
+
+const cbase = { id: eid };
+export const ConstraintSchema = z.discriminatedUnion("type", [
+  z.object({ ...cbase, type: z.literal("coincident"), a: eid, b: eid }).describe("point–point, point on line, point on circle/arc, or line–line (collinear)"),
+  z.object({ ...cbase, type: z.literal("horizontal"), a: eid, b: eid.optional() }).describe("a line, or two points, level with sketch x"),
+  z.object({ ...cbase, type: z.literal("vertical"), a: eid, b: eid.optional() }),
+  z.object({ ...cbase, type: z.literal("parallel"), a: eid, b: eid }),
+  z.object({ ...cbase, type: z.literal("perpendicular"), a: eid, b: eid }),
+  z.object({ ...cbase, type: z.literal("equal"), a: eid, b: eid }).describe("two lines of equal length, or two circles/arcs of equal radius"),
+  z.object({ ...cbase, type: z.literal("tangent"), a: eid, b: eid }).describe("line–circle/arc or circle/arc–circle/arc"),
+  z.object({ ...cbase, type: z.literal("concentric"), a: eid, b: eid }),
+  z.object({ ...cbase, type: z.literal("midpoint"), a: eid, b: eid }).describe("point a at the middle of line b"),
+  z.object({ ...cbase, type: z.literal("fix"), a: eid }).describe("pins a point (or every point of a line/circle/arc) where it is"),
+  z
+    .object({
+      ...cbase,
+      type: z.literal("distance"),
+      a: eid,
+      b: eid.optional(),
+      value: num.min(0),
+      mode: z.enum(["aligned", "horizontal", "vertical"]).optional(),
+    })
+    .describe(
+      "Driving dimension. One line: its length. Two points: straight-line distance (aligned, default), or only the x gap (horizontal) or y gap (vertical), leaving the other direction free. Point and line: perpendicular distance. Two lines: distance between them (makes them parallel).",
+    ),
+  z.object({ ...cbase, type: z.literal("radius"), a: eid, value: pos }),
+  z.object({ ...cbase, type: z.literal("diameter"), a: eid, value: pos }),
+  z.object({ ...cbase, type: z.literal("angle"), a: eid, b: eid.optional(), value: num }).describe("Degrees between two lines, or between line a and the sketch x axis when b is omitted"),
+]);
+
 export const SketchSchema = z.object({
   ...base,
   type: z.literal("sketch"),
   plane: PlaneSchema,
+  entities: z.array(EntitySchema).max(2000).default([]).describe("Points, and the lines, circles and arcs that reference them by id"),
+  constraints: z.array(ConstraintSchema).max(4000).default([]).describe("Geometric relations and driving dimensions; the app solves them"),
   profiles: z
     .array(ProfileSchema)
     .max(200)
-    .describe("Closed profiles in sketch mm. A profile nested inside another becomes a hole in it."),
+    .optional()
+    .describe(
+      "Shorthand for input only: whole closed shapes, which the app expands into fully-dimensioned entities and constraints. A shape nested inside another becomes a hole.",
+    ),
+});
+
+const planeLike = z.object({ origin: pt3, normal: pt3 });
+export const PlaneFeatureSchema = z.object({
+  ...base,
+  type: z.literal("plane"),
+  def: z.discriminatedUnion("kind", [
+    z.object({ kind: z.literal("offset"), from: PlaneSchema, distance: num.describe("mm along the source plane's normal; negative goes the other way") }),
+    z.object({ kind: z.literal("points"), points: z.array(pt3).length(3).describe("Three model points the plane passes through") }),
+    z.object({ kind: z.literal("midplane"), a: planeLike, b: planeLike }).describe("Halfway between two parallel faces"),
+  ]),
 });
 
 export const ExtrudeSchema = z.object({
@@ -145,6 +221,7 @@ export const ShellSchema = z.object({
 
 export const FeatureSchema = z.discriminatedUnion("type", [
   SketchSchema,
+  PlaneFeatureSchema,
   ExtrudeSchema,
   RevolveSchema,
   FilletSchema,
@@ -159,7 +236,15 @@ export type PlaneRef = z.infer<typeof PlaneSchema>;
 export type Profile = z.infer<typeof ProfileSchema>;
 export type EdgeSel = z.infer<typeof EdgeSelSchema>;
 export type FaceSel = z.infer<typeof FaceSelSchema>;
+export type Entity = z.infer<typeof EntitySchema>;
+export type PointEntity = Extract<Entity, { type: "point" }>;
+export type LineEntity = Extract<Entity, { type: "line" }>;
+export type CircleEntity = Extract<Entity, { type: "circle" }>;
+export type ArcEntity = Extract<Entity, { type: "arc" }>;
+export type Constraint = z.infer<typeof ConstraintSchema>;
+export type ConstraintType = Constraint["type"];
 export type SketchFeature = z.infer<typeof SketchSchema>;
+export type PlaneFeature = z.infer<typeof PlaneFeatureSchema>;
 export type ExtrudeFeature = z.infer<typeof ExtrudeSchema>;
 export type RevolveFeature = z.infer<typeof RevolveSchema>;
 export type FilletFeature = z.infer<typeof FilletSchema>;
@@ -178,7 +263,9 @@ export function defaultName(f: Feature, existing: Feature[]): string {
   const label =
     f.type === "sketch"
       ? "Sketch"
-      : f.type === "extrude"
+      : f.type === "plane"
+        ? "Plane"
+        : f.type === "extrude"
         ? f.op === "cut"
           ? "Cut-Extrude"
           : "Boss-Extrude"
@@ -206,6 +293,7 @@ export function newId(prefix: string, existing: Feature[]): string {
 
 export const ID_PREFIX: Record<FeatureType, string> = {
   sketch: "sk",
+  plane: "pl",
   extrude: "ex",
   revolve: "rv",
   fillet: "fl",
@@ -219,4 +307,79 @@ export function issuesText(err: z.ZodError): string {
     .slice(0, 6)
     .map((i) => `${i.path.join(".") || "(root)"}: ${i.message}`)
     .join("; ");
+}
+
+// ---------------------------------------------------------------------------
+// Assemblies and the file tree
+
+const quat = z.array(num).length(4);
+export const PoseSchema = z.object({ p: pt3, q: quat.describe("Unit quaternion [x, y, z, w]") });
+
+export const GeoRefSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("plane"), origin: pt3, dir: pt3 }).describe("A flat face: a point on it and its outward normal, in the part's own coordinates"),
+  z.object({ type: z.literal("axis"), origin: pt3, dir: pt3 }).describe("A straight edge, or the axis of a round face or circular edge"),
+  z.object({ type: z.literal("point"), origin: pt3 }).describe("A vertex"),
+]);
+
+export const MateTypeSchema = z.enum(["coincident", "concentric", "parallel", "perpendicular", "distance", "angle", "lock"]);
+
+export const ComponentSchema = z.object({
+  id: z.string(),
+  name: z.string().max(60),
+  part: z.string().describe("File id of the part this is an instance of"),
+  pose: PoseSchema,
+  fixed: z.boolean().optional(),
+});
+
+export const MateSchema = z.object({
+  id: z.string(),
+  name: z.string().max(60),
+  type: MateTypeSchema,
+  a: z.object({ component: z.string(), ref: GeoRefSchema }),
+  b: z.object({ component: z.string(), ref: GeoRefSchema }),
+  value: num.optional().describe("mm for distance, degrees for angle"),
+  flip: z.boolean().optional(),
+  suppressed: z.boolean().optional(),
+});
+
+export const AssemblySchema = z.object({
+  name: z.string(),
+  components: z.array(ComponentSchema),
+  mates: z.array(MateSchema),
+});
+
+export type Pose = { p: Vec3; q: [number, number, number, number] };
+export type GeoRef = { type: "plane"; origin: Vec3; dir: Vec3 } | { type: "axis"; origin: Vec3; dir: Vec3 } | { type: "point"; origin: Vec3 };
+export type MateType = z.infer<typeof MateTypeSchema>;
+export interface Component {
+  id: string;
+  name: string;
+  part: string;
+  pose: Pose;
+  fixed?: boolean;
+}
+export interface Mate {
+  id: string;
+  name: string;
+  type: MateType;
+  a: { component: string; ref: GeoRef };
+  b: { component: string; ref: GeoRef };
+  value?: number;
+  flip?: boolean;
+  suppressed?: boolean;
+}
+export interface AssemblyDoc {
+  name: string;
+  components: Component[];
+  mates: Mate[];
+}
+export type AnyDoc = PartDoc | AssemblyDoc;
+export const isAssembly = (d: AnyDoc): d is AssemblyDoc => "components" in d;
+
+export interface FileEntry {
+  id: string;
+  kind: "folder" | "part" | "assembly";
+  name: string;
+  parent: string | null;
+  updated: number;
 }

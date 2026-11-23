@@ -13,14 +13,14 @@ import {
   type Face,
   type Shape3D,
 } from "replicad";
-import { nestingDepths, planeFrame, v3, type Frame } from "../model/geom2d";
+import { nestingOf, planeFrame, planeFeatureFrame, v3, type Frame } from "../model/geom2d";
+import { loopPolygon, sketchLoops, type Loop } from "../sketch/build";
 import type {
   Axis,
   EdgeSel,
   ExtrudeFeature,
   FaceSel,
   Feature,
-  Profile,
   RevolveFeature,
   SketchFeature,
   Vec3,
@@ -49,65 +49,30 @@ const AXIS: Record<Axis, Vec3> = { X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] };
 const AXIS_INDEX: Record<Axis, number> = { X: 0, Y: 1, Z: 2 };
 const TOL = 1e-4;
 
-function profileDrawing(p: Profile): Drawing {
-  switch (p.type) {
-    case "circle":
-      return drawCircle(p.d / 2).translate(p.cx, p.cy);
-    case "rect": {
-      const r = Math.min(p.r ?? 0, p.w / 2 - 1e-6, p.h / 2 - 1e-6);
-      let d = drawRoundedRectangle(p.w, p.h, r > 1e-6 ? r : 0);
-      if (p.angle) d = d.rotate(p.angle, [0, 0]);
-      return d.translate(p.cx, p.cy);
-    }
-    case "polygon": {
-      const pts = dedupe(p.points as [number, number][]);
-      if (pts.length < 3) throw new Error("polygon needs at least 3 distinct points");
-      let pen = draw(pts[0]);
-      for (let i = 1; i < pts.length; i++) pen = pen.lineTo(pts[i]);
-      return pen.close();
-    }
-    case "slot": {
-      const dx = p.x2 - p.x1;
-      const dy = p.y2 - p.y1;
-      const len = Math.hypot(dx, dy);
-      if (len < 1e-6) return drawCircle(p.w / 2).translate(p.x1, p.y1);
-      const r = p.w / 2;
-      const ux = dx / len;
-      const uy = dy / len;
-      const nx = -uy;
-      const ny = ux;
-      // Two straight sides joined by semicircles through the end apexes.
-      return draw([p.x1 + nx * r, p.y1 + ny * r])
-        .threePointsArcTo([p.x1 - nx * r, p.y1 - ny * r], [p.x1 - ux * r, p.y1 - uy * r])
-        .lineTo([p.x2 - nx * r, p.y2 - ny * r])
-        .threePointsArcTo([p.x2 + nx * r, p.y2 + ny * r], [p.x2 + ux * r, p.y2 + uy * r])
-        .close();
-    }
-  }
+function loopDrawing(loop: Loop): Drawing {
+  if (loop.kind === "circle") return drawCircle(loop.r).translate(loop.c[0], loop.c[1]);
+  // Start on a line when there is one, so the pen's closing segment is the straight one.
+  const segs = loop.segs.slice();
+  const lineAt = segs.findIndex((s) => s.kind === "line");
+  if (lineAt >= 0) segs.push(...segs.splice(0, lineAt + 1));
+  let pen = draw(segs[0].a);
+  segs.forEach((s, i) => {
+    const last = i === segs.length - 1;
+    if (s.kind === "arc") pen = pen.threePointsArcTo(s.b, s.mid);
+    else if (!last) pen = pen.lineTo(s.b);
+  });
+  return pen.close();
 }
 
-function dedupe(pts: [number, number][]): [number, number][] {
-  const out: [number, number][] = [];
-  for (const p of pts) {
-    const q = out[out.length - 1];
-    if (!q || Math.hypot(p[0] - q[0], p[1] - q[1]) > 1e-6) out.push([p[0], p[1]]);
-  }
-  if (out.length > 1) {
-    const a = out[0];
-    const b = out[out.length - 1];
-    if (Math.hypot(a[0] - b[0], a[1] - b[1]) < 1e-6) out.pop();
-  }
-  return out;
-}
-
-/** Union of the outer profiles minus the nested ones (holes), by nesting depth. */
-function sketchDrawing(profiles: Profile[]): Drawing {
-  if (!profiles.length) throw new Error("sketch has no closed profiles");
-  const depths = nestingDepths(profiles);
-  const order = profiles.map((_, i) => i).sort((a, b) => depths[a] - depths[b]);
+/** Union of the outer loops minus the nested ones (holes), by nesting depth. */
+function sketchDrawing(sk: SketchFeature): Drawing {
+  const { loops } = sketchLoops(sk.entities);
+  if (!loops.length) throw new Error("sketch has no closed profile to use (lines must join end to end into a loop)");
+  const depths = nestingOf(loops.map((l) => loopPolygon(l, 32)));
+  const order = loops.map((_, i) => i).sort((a, b) => depths[a] - depths[b]);
   let result: Drawing | null = null;
   for (const i of order) {
-    const d = profileDrawing(profiles[i]);
+    const d = loopDrawing(loops[i]);
     if (!result) result = d;
     else result = depths[i] % 2 === 0 ? result.fuse(d) : result.cut(d);
   }
@@ -124,14 +89,13 @@ function bboxOf(shape: Shape3D): { min: Vec3; max: Vec3 } {
 }
 
 function solidFromSketch(sk: SketchFeature, frame: Frame, distance: number): Shape3D {
-  const sketch = sketchDrawing(sk.profiles).sketchOnPlane(replicadPlane(frame)) as {
+  const sketch = sketchDrawing(sk).sketchOnPlane(replicadPlane(frame)) as {
     extrude(d: number): Shape3D;
   };
   return sketch.extrude(distance);
 }
 
-function extrude(f: ExtrudeFeature, sk: SketchFeature, body: Shape3D | null): Shape3D {
-  const frame = planeFrame(sk.plane);
+function extrude(f: ExtrudeFeature, sk: SketchFeature, frame: Frame, body: Shape3D | null): Shape3D {
   let dir = f.direction ?? "auto";
   if (dir === "auto") {
     dir = "normal";
@@ -158,12 +122,11 @@ function extrude(f: ExtrudeFeature, sk: SketchFeature, body: Shape3D | null): Sh
   return combine(body, solid, f.op);
 }
 
-function revolve(f: RevolveFeature, sk: SketchFeature, body: Shape3D | null): Shape3D {
-  const frame = planeFrame(sk.plane);
+function revolve(f: RevolveFeature, sk: SketchFeature, frame: Frame, body: Shape3D | null): Shape3D {
   const off = f.axisOffset ?? 0;
   const axisDir = f.axis === "x" ? frame.x : frame.y;
   const origin = v3.add(frame.origin, v3.scale(f.axis === "x" ? frame.y : frame.x, off));
-  const made = sketchDrawing(sk.profiles).sketchOnPlane(replicadPlane(frame)) as unknown as {
+  const made = sketchDrawing(sk).sketchOnPlane(replicadPlane(frame)) as unknown as {
     sketches?: { revolve(a: Vec3, o: { origin: Vec3; angle: number }): Shape3D }[];
     revolve?(a: Vec3, o: { origin: Vec3; angle: number }): Shape3D;
   };
@@ -289,6 +252,7 @@ function errText(e: unknown): string {
 export function evaluate(features: Feature[]): EvalResult {
   let body: Shape3D | null = null;
   const sketches = new Map<string, SketchFeature>();
+  const planes = new Map<string, Frame>();
   const status: Record<string, FeatureStatus> = {};
 
   const sketchFor = (id: string): SketchFeature => {
@@ -296,6 +260,7 @@ export function evaluate(features: Feature[]): EvalResult {
     if (!sk) throw new Error(`sketch "${id}" not found before this feature (missing, later in the tree, suppressed or invalid)`);
     return sk;
   };
+  const frameOf = (sk: SketchFeature): Frame => planeFrame(sk.plane, planes);
 
   for (const f of features) {
     if (f.suppressed) {
@@ -304,15 +269,18 @@ export function evaluate(features: Feature[]): EvalResult {
     }
     try {
       switch (f.type) {
+        case "plane":
+          planes.set(f.id, planeFeatureFrame(f, planes));
+          break;
         case "sketch":
-          if (f.profiles.length) sketchDrawing(f.profiles); // surface bad profiles here, not at the extrude
+          frameOf(f); // surface a missing plane here, not at the extrude
           sketches.set(f.id, f);
           break;
         case "extrude":
-          body = extrude(f, sketchFor(f.sketch), body);
+          body = extrude(f, sketchFor(f.sketch), frameOf(sketchFor(f.sketch)), body);
           break;
         case "revolve":
-          body = revolve(f, sketchFor(f.sketch), body);
+          body = revolve(f, sketchFor(f.sketch), frameOf(sketchFor(f.sketch)), body);
           break;
         case "fillet":
         case "chamfer": {

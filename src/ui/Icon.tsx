@@ -35,6 +35,29 @@ const PATHS: Record<string, string> = {
   face: "M5 9l7-4 7 4-7 4zM5 9v6l7 4 7-4V9",
   history: "M4 6h16M4 12h10M4 18h13",
   warn: "M12 4l9 16H3zM12 10v4M12 17h.01",
+  arc: "M4 18A14 14 0 0 1 20 8M4 18h.01M20 8h.01",
+  dim: "M4 8v8M20 8v8M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3",
+  coincident: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 11.5v1",
+  horizontal: "M4 12h16M4 9v6M20 9v6",
+  vertical: "M12 4v16M9 4h6M9 20h6",
+  parallel: "M7 20L13 4M12 20l6-16",
+  perpendicular: "M12 5v14M5 19h14",
+  equal: "M6 9h12M6 15h12",
+  tangent: "M4 6h16M12 6a6 6 0 1 0 0 12 6 6 0 0 0 0-12z",
+  concentric: "M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
+  midpoint: "M4 16L20 8M12 12h.01M10 10l4 4",
+  fix: "M12 3v10M8 7h8M5 13a7 7 0 0 0 14 0M12 20v-7",
+  construction: "M4 20l3-3M10 14l3-3M16 8l3-3",
+  angle: "M5 19h14M5 19L16 6M12 19a8 8 0 0 0-2.5-5.5",
+  folder: "M3 7h6l2 2h10v10H3z",
+  part: "M12 3l8 4.5v9L12 21l-8-4.5v-9zM12 12l8-4.5M12 12L4 7.5M12 12v9",
+  assembly: "M3 8l5-3 5 3v6l-5 3-5-3zM13 12l4-2.5 4 2.5v5l-4 2.5-4-2.5M8 11v6",
+  back: "M15 5l-7 7 7 7",
+  more: "M6 12h.01M12 12h.01M18 12h.01",
+  files: "M4 5h7l2 2h7v12H4zM4 10h16",
+  lock: "M7 11V8a5 5 0 0 1 10 0v3M6 11h12v9H6z",
+  flip: "M7 4v16M17 4v16M7 8l-3 4 3 4M17 8l3 4-3 4",
+  move: "M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3",
 };
 
 export function Icon({ name, size = 20, class: cls }: { name: string; size?: number; class?: string }) {
@@ -58,6 +81,7 @@ export function Icon({ name, size = 20, class: cls }: { name: string; size?: num
 
 export const FEATURE_ICON: Record<string, string> = {
   sketch: "sketch",
+  plane: "plane",
   extrude: "extrude",
   revolve: "revolve",
   fillet: "fillet",

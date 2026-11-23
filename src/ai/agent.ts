@@ -4,25 +4,30 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { signal } from "@preact/signals";
 import type { EvalOutcome } from "../kernel/protocol";
-import { planeFrame, recognizeStroke } from "../model/geom2d";
-import { FeatureSchema, issuesText, type Feature, type PartDoc } from "../model/schema";
+import { recognizeStroke } from "../model/geom2d";
+import { FeatureSchema, issuesText, type Feature, type PartDoc, type Profile, type SketchFeature } from "../model/schema";
 import {
+  activeFrame,
   activeSketch,
+  asm,
   bodyInfo,
   commit,
   consumedSketches,
   doc,
   evalStatus,
+  frames,
   gridStep,
   ink,
-  draft,
   mode,
   selection,
+  sketchInfo,
+  sketchSel,
   treeSelected,
   withFeature,
   withoutFeature,
   withPatch,
 } from "../model/store";
+import { addProfile, normalizeSketch, solved, type SketchData } from "../sketch/build";
 import { viewport } from "../view/Viewport";
 import { ToolInputs, type ToolName } from "./tools";
 
@@ -129,11 +134,13 @@ export function describeState(userText: string): { text: string; wantsImage: boo
       : `body: no solid yet`,
   );
   const unused = d.features.filter((f) => f.type === "sketch" && !consumedSketches(d).has(f.id)).map((f) => f.id);
+  void frames.value;
   if (unused.length) lines.push(`sketches not yet used by a feature: ${unused.join(", ")}`);
   if (treeSelected.value) lines.push(`feature highlighted in the tree: ${treeSelected.value}`);
 
   const sel = selection.value;
   if (sel.edges.length) lines.push(`selected edges (a point on each): ${JSON.stringify(sel.edges.map((e) => e.point.map(r3)))}`);
+  if (sel.vertices.length) lines.push(`selected corners: ${JSON.stringify(sel.vertices.map((v) => v.point.map(r3)))}`);
   if (sel.faces.length)
     lines.push(
       `selected faces: ${JSON.stringify(
@@ -142,12 +149,15 @@ export function describeState(userText: string): { text: string; wantsImage: boo
     );
 
   const sk = activeSketch();
+  const fr = activeFrame.value;
   let wantsImage = !!body;
-  if (sk) {
-    const fr = planeFrame(sk.plane);
+  if (sk && fr) {
+    const info = sketchInfo.value;
     lines.push(
       `mode: sketching in "${sk.id}" — plane origin ${JSON.stringify(fr.origin.map(r3))}, sketch x = ${JSON.stringify(fr.x.map(r3))}, sketch y = ${JSON.stringify(fr.y.map(r3))}, normal ${JSON.stringify(fr.n.map(r3))}`,
     );
+    if (info) lines.push(`sketch state: ${info.dof === 0 ? "fully defined" : `${info.dof} degrees of freedom left`}, ${info.loops} closed profile(s)${info.open ? `, ${info.open} curve(s) not part of a closed loop` : ""}`);
+    if (sketchSel.value.length) lines.push(`selected sketch entities: ${sketchSel.value.join(", ")}`);
     const strokes = ink.value;
     if (strokes.length) {
       wantsImage = true;
@@ -229,7 +239,9 @@ export async function runTool(name: string, input: unknown): Promise<{ content: 
       if (after && !d.features.some((f) => f.id === after)) return { content: `No feature with id "${after}" to insert after.`, isError: true };
       let next = d;
       let anchor = after;
-      for (const f of features) {
+      for (const raw of features) {
+        const f = raw.type === "sketch" ? settle(raw) : raw;
+        if (typeof f === "string") return { content: f, isError: true };
         next = withFeature(next, f, anchor).doc;
         if (anchor) anchor = f.id;
       }
@@ -243,8 +255,27 @@ export async function runTool(name: string, input: unknown): Promise<{ content: 
         return { content: "id and type cannot be changed; delete the feature and add a new one instead.", isError: true };
       const merged = FeatureSchema.safeParse({ ...current, ...changes });
       if (!merged.success) return { content: `The changed feature is invalid — ${issuesText(merged.error)}`, isError: true };
-      const next = withPatch(d, id, merged.data);
+      const f = merged.data.type === "sketch" ? settle(merged.data) : merged.data;
+      if (typeof f === "string") return { content: f, isError: true };
+      const next = withPatch(d, id, f);
       return { content: report(await commit(next), next, { updated: id }) };
+    }
+    case "add_sketch_shapes":
+    case "set_dimensions": {
+      const input = parsed.data as { sketch: string; profiles?: Profile[]; values?: { id: string; value: number }[] };
+      const sk = d.features.find((f) => f.id === input.sketch);
+      if (sk?.type !== "sketch") return { content: `No sketch with id "${input.sketch}".`, isError: true };
+      const data: SketchData = { entities: sk.entities.map((e) => ({ ...e })), constraints: sk.constraints.map((c) => ({ ...c })) };
+      if (input.profiles) for (const p of input.profiles) addProfile(data, p, true);
+      for (const v of input.values ?? []) {
+        const c = data.constraints.find((k) => k.id === v.id);
+        if (!c || !("value" in c)) return { content: `"${v.id}" is not a dimension in sketch ${sk.id}. Its dimensions are: ${data.constraints.filter((k) => "value" in k).map((k) => k.id).join(", ") || "(none)"}`, isError: true };
+        c.value = v.value;
+      }
+      const f = settle({ ...sk, ...data });
+      if (typeof f === "string") return { content: f, isError: true };
+      const next = withPatch(d, sk.id, f);
+      return { content: report(await commit(next), next, { sketch: sk.id, entities: f.entities.length, constraints: f.constraints.length }) };
     }
     case "delete_features": {
       const { ids } = parsed.data as { ids: string[] };
@@ -261,6 +292,13 @@ export async function runTool(name: string, input: unknown): Promise<{ content: 
       return { content: JSON.stringify({ renamed: partName }) };
     }
   }
+}
+
+/** Expands shorthand and solves a sketch Claude wrote; returns an explanation instead if it cannot be solved. */
+function settle(raw: SketchFeature): SketchFeature | string {
+  const r = solved(normalizeSketch(raw));
+  if (!r.ok) return `Sketch "${raw.id}" cannot be solved: ${r.error ?? "its relations and dimensions contradict each other"}. Nothing was changed.`;
+  return r.feature;
 }
 
 /**
@@ -290,6 +328,10 @@ export async function send(userText: string) {
   const hadInk = ink.value.length > 0;
   const text = userText.trim() || (hadInk ? "Interpret my sketch." : "");
   if (!text) return;
+  if (asm.value) {
+    chat.value = [...chat.value, { role: "user", text }, { role: "assistant", text: "I can edit parts for now, not assemblies. Open a part from the tree and ask me there.", error: true }];
+    return;
+  }
 
   const before = doc.value;
   // Built before the message is added to the chat, so the request is not repeated in its own context.
@@ -376,10 +418,11 @@ export async function send(userText: string) {
     // Ink that Claude has turned into geometry is done with; a consumed sketch ends sketch mode.
     if (doc.value !== before) {
       if (hadInk) ink.value = [];
-      draft.value = [];
       const m = mode.value;
-      if (m.kind === "sketch" && (consumedSketches(doc.value).has(m.sketchId) || !doc.value.features.some((f) => f.id === m.sketchId)))
+      if (m.kind === "sketch" && (consumedSketches(doc.value).has(m.sketchId) || !doc.value.features.some((f) => f.id === m.sketchId))) {
+        sketchSel.value = [];
         mode.value = { kind: "model" };
+      }
       // Let the rebuilt mesh land, then make sure the result is in view.
       setTimeout(() => viewport()?.fitIfNeeded(), 120);
     }

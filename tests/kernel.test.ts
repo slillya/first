@@ -5,6 +5,7 @@ import { setOC } from "replicad";
 import { evaluate, realEdgeGroups } from "../src/kernel/evaluate";
 import { nestingDepths, recognizeStroke } from "../src/model/geom2d";
 import { FeatureSchema, type Feature, type Vec2 } from "../src/model/schema";
+import { normalizeSketch } from "../src/sketch/build";
 
 const require = createRequire(import.meta.url);
 
@@ -15,7 +16,11 @@ beforeAll(async () => {
   setOC(oc as never);
 }, 60_000);
 
-const parse = (fs: unknown[]): Feature[] => fs.map((f) => FeatureSchema.parse(f));
+const feat = (f: unknown): Feature => {
+  const parsed = FeatureSchema.parse(f);
+  return parsed.type === "sketch" ? normalizeSketch(parsed) : parsed;
+};
+const parse = (fs: unknown[]): Feature[] => fs.map(feat);
 
 const plate: unknown[] = [
   {
@@ -71,23 +76,23 @@ describe("kernel", () => {
     ]);
     const v0 = 20 * 20 * 10;
     const corner = (4 - Math.PI) * 2 * 2; // area removed from the square by four r=2 corners
-    const vert = evaluate([...box, FeatureSchema.parse({ id: "f", type: "fillet", radius: 2, edges: { parallelTo: "Z" } })]);
+    const vert = evaluate([...box, feat({ id: "f", type: "fillet", radius: 2, edges: { parallelTo: "Z" } })]);
     expect(vert.status.f.ok).toBe(true);
     expect(vert.body!.volume).toBeCloseTo(v0 - corner * 10, 2);
 
-    const one = evaluate([...box, FeatureSchema.parse({ id: "f", type: "fillet", radius: 2, edges: { near: [[10, 10, 5]] } })]);
+    const one = evaluate([...box, feat({ id: "f", type: "fillet", radius: 2, edges: { near: [[10, 10, 5]] } })]);
     expect(one.body!.volume).toBeCloseTo(v0 - (corner / 4) * 10, 2);
 
-    const top = evaluate([...box, FeatureSchema.parse({ id: "c", type: "chamfer", distance: 1, edges: { onPlane: { normal: "Z", at: 10 } } })]);
+    const top = evaluate([...box, feat({ id: "c", type: "chamfer", distance: 1, edges: { onPlane: { normal: "Z", at: 10 } } })]);
     expect(top.status.c.ok).toBe(true);
     expect(top.body!.volume).toBeLessThan(v0);
     expect(top.body!.faces).toBe(10);
 
-    const none = evaluate([...box, FeatureSchema.parse({ id: "f", type: "fillet", radius: 2, edges: { onPlane: { normal: "Z", at: 99 } } })]);
+    const none = evaluate([...box, feat({ id: "f", type: "fillet", radius: 2, edges: { onPlane: { normal: "Z", at: 99 } } })]);
     expect(none.status.f.ok).toBe(false);
     expect(none.body!.volume).toBeCloseTo(v0, 3); // failed feature is skipped, body survives
 
-    const tooBig = evaluate([...box, FeatureSchema.parse({ id: "f", type: "fillet", radius: 50, edges: {} })]);
+    const tooBig = evaluate([...box, feat({ id: "f", type: "fillet", radius: 50, edges: {} })]);
     expect(tooBig.status.f.ok).toBe(false);
     expect(tooBig.status.f.error).toBeTruthy();
   });

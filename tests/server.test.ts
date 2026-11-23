@@ -87,7 +87,7 @@ describe("/api/chat", () => {
     });
     expect(b.betas).toBeUndefined(); // betas travel as a header, not in the body
     expect(typeof b.system).toBe("string");
-    expect(b.tools.map((t: any) => t.name)).toEqual(["add_features", "update_feature", "delete_features", "rename_part"]);
+    expect(b.tools.map((t: any) => t.name)).toEqual(["add_features", "update_feature", "delete_features", "rename_part", "add_sketch_shapes", "set_dimensions"]);
     for (const t of b.tools) {
       expect(t.eager_input_streaming).toBe(true);
       expect(t.input_schema.type).toBe("object");

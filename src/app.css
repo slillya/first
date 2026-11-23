@@ -826,3 +826,201 @@ button:disabled {
     animation: none;
   }
 }
+
+/* ---- Tree extras: back button, planes, assemblies ---------------------- */
+
+.pill-row {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.pill.icon-only {
+  flex: none;
+  width: 44px;
+  padding: 0;
+  justify-content: center;
+}
+
+.pill .kind {
+  color: var(--muted);
+}
+
+.row.quiet .row-name {
+  color: var(--muted);
+}
+
+.row.selected.quiet .row-name {
+  color: var(--text);
+}
+
+.muted-tag {
+  color: var(--muted);
+}
+
+.panel h4 {
+  margin: 8px 10px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.panel-head .link {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.row-actions {
+  flex-wrap: wrap;
+}
+
+.round.danger {
+  color: var(--err);
+}
+
+/* ---- File browser ------------------------------------------------------ */
+
+.files {
+  position: absolute;
+  z-index: 4;
+  top: calc(var(--safe-t) + 62px);
+  left: max(16px, var(--safe-l));
+  right: max(16px, var(--safe-r));
+  max-width: 420px;
+  max-height: calc(var(--vvh, 100vh) - var(--safe-t) - 150px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding: 8px;
+  border-radius: 20px;
+  background: var(--panel);
+  -webkit-backdrop-filter: blur(18px) saturate(1.3);
+  backdrop-filter: blur(18px) saturate(1.3);
+  border: 1px solid var(--line);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.4);
+}
+
+.files header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 2px 8px 8px;
+}
+
+.files header strong {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-new {
+  display: flex;
+  gap: 6px;
+  padding: 0 4px 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.file-new button {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 11px;
+  border-radius: 12px;
+  background: var(--raise);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.file-row {
+  display: flex;
+  align-items: center;
+}
+
+.file-row .row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.more {
+  flex: none;
+  width: 40px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.row.current .row-name {
+  font-weight: 600;
+}
+
+/* ---- Sketch relations and dimensions ----------------------------------- */
+
+.context.stretch {
+  align-self: stretch;
+}
+
+.context-hint .state {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.context-hint .state.good {
+  color: #8fd19e;
+}
+
+.context-hint .state.err {
+  color: var(--err);
+}
+
+.dim-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.segmented.small {
+  flex: 1;
+  height: 36px;
+}
+
+.segmented.small button {
+  padding: 0 10px;
+}
+
+.rel {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  width: 17px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  background: rgba(31, 30, 29, 0.82);
+  border: 1px solid rgba(143, 209, 158, 0.45);
+  color: #a9dcb4;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.rel.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* A little extra hit area, kept small so it never covers the line it labels. */
+.rel::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+}

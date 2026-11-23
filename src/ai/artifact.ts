@@ -45,6 +45,22 @@ const SCHEMAS: Record<ToolName, SampleTool["inputSchema"]> = {
   },
   delete_features: { type: "object", properties: { ids: { type: "array", items: { type: "string" } } }, required: ["ids"] },
   rename_part: { type: "object", properties: { name: { type: "string" } }, required: ["name"] },
+  add_sketch_shapes: {
+    type: "object",
+    properties: {
+      sketch: { type: "string", description: "id of an existing sketch" },
+      profiles: { type: "array", items: { type: "object" }, description: "Whole shapes (rect, circle, slot, polygon) as described under profiles in the feature schema" },
+    },
+    required: ["sketch", "profiles"],
+  },
+  set_dimensions: {
+    type: "object",
+    properties: {
+      sketch: { type: "string" },
+      values: { type: "array", items: { type: "object", properties: { id: { type: "string" }, value: { type: "number" } }, required: ["id", "value"] } },
+    },
+    required: ["sketch", "values"],
+  },
 };
 
 const INSTRUCTIONS = `${SYSTEM_PROMPT}

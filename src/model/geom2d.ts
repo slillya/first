@@ -1,7 +1,7 @@
 // 2D sketch geometry that does not need the CAD kernel: plane frames,
 // profile outlines for drawing and picking, hole nesting, and the offline
 // recogniser that turns a finger stroke into a clean profile.
-import type { PlaneRef, Profile, Vec2, Vec3 } from "./schema";
+import type { Feature, PlaneFeature, PlaneRef, Profile, Vec2, Vec3 } from "./schema";
 
 export interface Frame {
   origin: Vec3;
@@ -27,8 +27,16 @@ export const v3 = {
   },
 };
 
-/** Right-handed frame (x, y, n) of a sketch plane, y = n × x. */
-export function planeFrame(plane: PlaneRef): Frame {
+/**
+ * Right-handed frame (x, y, n) of a sketch plane, y = n × x. Planes that point
+ * at a plane feature are looked up in `planes` (see planeFrames).
+ */
+export function planeFrame(plane: PlaneRef, planes?: Map<string, Frame>): Frame {
+  if ("feature" in plane) {
+    const f = planes?.get(plane.feature);
+    if (!f) throw new Error(`plane "${plane.feature}" not found before this feature`);
+    return f;
+  }
   if ("base" in plane) {
     const off = plane.offset ?? 0;
     const f: Record<string, [Vec3, Vec3]> = {
@@ -55,6 +63,40 @@ export function planeFrame(plane: PlaneRef): Frame {
   if (v3.len(x) < 1e-9) x = Math.abs(n[2]) < 0.9 ? v3.cross([0, 0, 1], n) : [1, 0, 0];
   x = v3.norm(x);
   return { origin: plane.origin as Vec3, x, y: v3.cross(n, x), n };
+}
+
+/** Frame of a reference-plane feature. */
+export function planeFeatureFrame(f: PlaneFeature, planes: Map<string, Frame>): Frame {
+  const d = f.def;
+  if (d.kind === "offset") {
+    const from = planeFrame(d.from, planes);
+    return { ...from, origin: v3.add(from.origin, v3.scale(from.n, d.distance)) };
+  }
+  if (d.kind === "points") {
+    const [a, b, c] = d.points as Vec3[];
+    const x = v3.sub(b, a);
+    const n = v3.cross(x, v3.sub(c, a));
+    if (v3.len(x) < 1e-9 || v3.len(n) < 1e-9) throw new Error("the three points are in a line, so they do not define a plane");
+    return frameForFace(a, n);
+  }
+  const na = v3.norm(d.a.normal as Vec3);
+  if (Math.abs(Math.abs(v3.dot(na, v3.norm(d.b.normal as Vec3))) - 1) > 1e-6) throw new Error("a midplane needs two parallel faces");
+  const mid = v3.scale(v3.add(d.a.origin as Vec3, d.b.origin as Vec3), 0.5);
+  return frameForFace(mid, na);
+}
+
+/** Frames of every usable plane feature, in tree order. Broken ones are simply absent. */
+export function planeFrames(features: Feature[]): Map<string, Frame> {
+  const planes = new Map<string, Frame>();
+  for (const f of features) {
+    if (f.type !== "plane" || f.suppressed) continue;
+    try {
+      planes.set(f.id, planeFeatureFrame(f, planes));
+    } catch {
+      // Reported by the kernel as a build error on that feature.
+    }
+  }
+  return planes;
 }
 
 export function toWorld(f: Frame, p: Vec2): Vec3 {
@@ -180,18 +222,17 @@ export function distToOutline(p: Vec2, pts: Vec2[], closed = true): number {
 }
 
 /**
- * How deeply each profile is nested inside the others. Even depth = material,
+ * How deeply each outline is nested inside the others. Even depth = material,
  * odd depth = hole, which is how a sketch with a circle inside a rectangle
  * extrudes to a plate with a hole.
  */
-export function nestingDepths(profiles: Profile[]): number[] {
-  const polys = profiles.map((p) => profilePolygon(p, 32));
+export function nestingOf(polys: Vec2[][]): number[] {
   const areas = polys.map((p) => Math.abs(polygonArea(p)));
   return polys.map((poly, i) => {
     let depth = 0;
     for (let j = 0; j < polys.length; j++) {
       if (j === i || areas[j] <= areas[i]) continue;
-      // Nested only if every sampled vertex is inside the bigger profile.
+      // Nested only if every sampled vertex is inside the bigger outline.
       const step = Math.max(1, Math.floor(poly.length / 8));
       let all = true;
       for (let k = 0; k < poly.length; k += step)
@@ -204,6 +245,8 @@ export function nestingDepths(profiles: Profile[]): number[] {
     return depth;
   });
 }
+
+export const nestingDepths = (profiles: Profile[]): number[] => nestingOf(profiles.map((p) => profilePolygon(p, 32)));
 
 export function moveProfile(p: Profile, dx: number, dy: number): Profile {
   switch (p.type) {

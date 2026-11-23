@@ -1,9 +1,10 @@
 import { useEffect, useRef } from "preact/hooks";
-import { doc, gridStep, initKernel, kernelError, kernelPhase, mode, toast } from "../model/store";
+import { asm, doc, gridStep, initApp, kernelError, kernelPhase, mode, toast } from "../model/store";
 import { createViewport } from "../view/Viewport";
 import { Composer, ReplyBubble } from "./Composer";
 import { DimLabels } from "./DimLabels";
 import { FeatureTree } from "./FeatureTree";
+import { Files } from "./Files";
 import { BottomCard } from "./Sheets";
 import { Toolbox } from "./Toolbox";
 
@@ -13,7 +14,7 @@ export function App() {
 
   useEffect(() => {
     const vp = createViewport(stage.current!);
-    initKernel();
+    initApp();
     // Tell the viewport how much of the screen the chat area covers so "fit" centres the part above it.
     const ro = new ResizeObserver(() => {
       const h = bottom.current?.offsetHeight ?? 96;
@@ -24,7 +25,7 @@ export function App() {
   }, []);
 
   const phase = kernelPhase.value;
-  const empty = doc.value.features.length === 0 && mode.value.kind === "model";
+  const empty = !asm.value && doc.value.features.length === 0 && mode.value.kind === "model";
 
   return (
     <div class="stage" ref={stage}>
@@ -52,6 +53,7 @@ export function App() {
         <FeatureTree />
         <Toolbox />
       </div>
+      <Files />
       {mode.value.kind === "sketch" && <div class="grid-note">grid {gridStep.value} mm</div>}
       {toast.value && (
         <div class="toast" role="status" key={toast.value.id}>
