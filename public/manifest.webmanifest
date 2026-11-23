@@ -1,0 +1,15 @@
+{
+  "name": "Napkin CAD",
+  "short_name": "Napkin",
+  "description": "Design mechanical parts on your phone by sketching with a finger and talking to Claude.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1f1e1d",
+  "theme_color": "#1f1e1d",
+  "icons": [
+    { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

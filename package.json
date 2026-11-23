@@ -1,0 +1,36 @@
+{
+  "name": "napkin-cad",
+  "version": "0.1.0",
+  "description": "Phone-first parametric CAD: sketch with a finger, design with Claude.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "deploy": "npm run build && wrangler deploy",
+    "e2e": "node tests/e2e/walkthrough.cjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.12.0",
+    "@preact/signals": "^2.11.4",
+    "preact": "^11.2.0",
+    "replicad": "^1.2.1",
+    "replicad-opencascadejs": "^1.2.1",
+    "three": "^0.187.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.6",
+    "@types/three": "^0.187.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.1",
+    "wrangler": "^4.166.0"
+  },
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  }
+}

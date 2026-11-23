@@ -1,0 +1,4 @@
+# Copy to .dev.vars for local development. In production set these as Worker secrets.
+ANTHROPIC_API_KEY=
+# Optional: require this passcode before the app may call Claude.
+APP_PASSCODE=
